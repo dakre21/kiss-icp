@@ -62,6 +62,7 @@ OdometryServer::OdometryServer(const rclcpp::NodeOptions &options)
     config_.max_range = declare_parameter<double>("max_range", config_.max_range);
     config_.min_range = declare_parameter<double>("min_range", config_.min_range);
     config_.deskew = declare_parameter<bool>("deskew", config_.deskew);
+    config_.use_imu = declare_parameter<bool>("use_imu", config_.use_imu);
     config_.voxel_size = declare_parameter<double>("voxel_size", config_.max_range / 100.0);
     config_.max_points_per_voxel = declare_parameter<int>("max_points_per_voxel", config_.max_points_per_voxel);
     config_.initial_threshold = declare_parameter<double>("initial_threshold", config_.initial_threshold);
@@ -79,6 +80,11 @@ OdometryServer::OdometryServer(const rclcpp::NodeOptions &options)
     pointcloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
         "pointcloud_topic", rclcpp::SensorDataQoS(),
         std::bind(&OdometryServer::RegisterFrame, this, std::placeholders::_1));
+
+    if (config_.use_imu)
+        imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
+            "/imu/data", rclcpp::SensorDataQoS(),
+            std::bind(&OdometryServer::ImuCallback, this, std::placeholders::_1));
 
     // Initialize publishers
     rclcpp::QoS qos((rclcpp::SystemDefaultsQoS().keep_last(1).durability_volatile()));
@@ -121,14 +127,22 @@ Sophus::SE3d OdometryServer::LookupTransform(const std::string &target_frame,
 void OdometryServer::RegisterFrame(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
     const auto cloud_frame_id = msg->header.frame_id;
     const auto points = PointCloud2ToEigen(msg);
-    const auto timestamps = [&]() -> std::vector<double> {
-        if (!config_.deskew) return {};
-        return GetTimestamps(msg);
-    }();
+
     const auto egocentric_estimation = (base_frame_.empty() || base_frame_ == cloud_frame_id);
 
     // Register frame, main entry point to KISS-ICP pipeline
-    const auto &[frame, keypoints] = odometry_.RegisterFrame(points, timestamps);
+    kiss_icp::pipeline::KissICP::Vector3dVectorTuple frame_and_keypoints;
+    if (config_.use_imu) 
+        frame_and_keypoints = odometry_.RegisterFrame(points, imu_pose_update_);
+    else {
+        const auto timestamps = [&]() -> std::vector<double> {
+            if (!config_.deskew) return {};
+            return GetTimestamps(msg);
+        }();
+        frame_and_keypoints = odometry_.RegisterFrame(points, timestamps);
+    }
+
+    const auto& [frame, keypoints] = frame_and_keypoints;
 
     // Compute the pose using KISS, ego-centric to the LiDAR
     const Sophus::SE3d kiss_pose = odometry_.poses().back();
@@ -146,6 +160,49 @@ void OdometryServer::RegisterFrame(const sensor_msgs::msg::PointCloud2::ConstSha
     if (publish_debug_clouds_) {
         PublishClouds(frame, keypoints, msg->header.stamp, cloud_frame_id);
     }
+}
+
+void OdometryServer::ImuCallback(const sensor_msgs::msg::Imu::ConstSharedPtr &msg) {
+    const auto now = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+    if (!last_imu_stamp_) {
+        last_imu_stamp_ = std::make_unique<double>(now);
+        return;
+    }
+
+    const auto imu_frame_id = msg->header.frame_id;
+    const auto dt = now - *last_imu_stamp_;
+
+    const auto acc = Eigen::Vector3d(msg->linear_acceleration.x, msg->linear_acceleration.y,
+                                     msg->linear_acceleration.z);
+    const auto gyro = Eigen::Vector3d(msg->angular_velocity.x, msg->angular_velocity.y,
+                                      msg->angular_velocity.z);
+
+    Eigen::Vector3d prior_rpy(imu_pose_update_.so3().log());
+    auto prior_rot = Eigen::Matrix3d::Identity() * prior_rpy * Eigen::Vector3d::Ones(3).transpose();
+    Eigen::Quaterniond prior_q(prior_rot);
+
+    const auto rot = Eigen::Matrix3d::Identity() * gyro * dt * Eigen::Vector3d::Ones(3).transpose();
+    Eigen::Quaterniond q(rot);
+
+    q = prior_q * q;
+    const auto vel = q * acc * dt;
+    Eigen::Matrix3d rot_mat = q.toRotationMatrix();
+
+    const auto pos = imu_pose_update_.translation() + vel * dt;
+    Eigen::VectorXd imu_update(6);
+    imu_update << rot_mat(0, 0), rot_mat(1, 1), rot_mat(2, 2), pos.x(), pos.y(), pos.z() - 9.81;
+
+    const auto imu_pose = Sophus::SE3d::exp(imu_update);
+
+    const auto egocentric_estimation = (base_frame_.empty() || base_frame_ == imu_frame_id);
+    const auto pose = [&]() -> Sophus::SE3d {
+        if (egocentric_estimation) return imu_pose;
+        const Sophus::SE3d imu2base = LookupTransform(base_frame_, imu_frame_id);
+        return imu2base * imu_pose * imu2base.inverse();
+    }();
+
+    imu_pose_update_ = imu_pose;
+    last_imu_stamp_ = std::make_unique<double>(now);
 }
 
 void OdometryServer::PublishOdometry(const Sophus::SE3d &pose,

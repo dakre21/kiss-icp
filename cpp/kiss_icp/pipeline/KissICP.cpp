@@ -52,6 +52,15 @@ KissICP::Vector3dVectorTuple KissICP::RegisterFrame(const std::vector<Eigen::Vec
     return RegisterFrame(deskew_frame);
 }
 
+KissICP::Vector3dVectorTuple KissICP::RegisterFrame(const std::vector<Eigen::Vector3d> &frame,
+                                                    const Sophus::SE3d &imu_pose) {
+    const auto &deskew_frame = [&]() -> std::vector<Eigen::Vector3d> {
+        if (!config_.deskew) return frame;
+        return DeSkewScan(frame, imu_pose);
+    }();
+    return RegisterFrame(deskew_frame);
+}
+
 KissICP::Vector3dVectorTuple KissICP::RegisterFrame(const std::vector<Eigen::Vector3d> &frame) {
     // Preprocess the input cloud
     const auto &cropped_frame = Preprocess(frame, config_.max_range, config_.min_range);

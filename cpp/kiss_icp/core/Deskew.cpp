@@ -46,4 +46,13 @@ std::vector<Eigen::Vector3d> DeSkewScan(const std::vector<Eigen::Vector3d> &fram
     });
     return corrected_frame;
 }
+
+std::vector<Eigen::Vector3d> DeSkewScan(const std::vector<Eigen::Vector3d> &frame,
+                                        const Sophus::SE3d &imu_pose) {
+    std::vector<Eigen::Vector3d> corrected_frame(frame.size());
+    tbb::parallel_for(size_t(0), frame.size(), [&](size_t i) {
+        corrected_frame[i] = imu_pose * frame[i];
+    });
+    return corrected_frame;
+}
 }  // namespace kiss_icp

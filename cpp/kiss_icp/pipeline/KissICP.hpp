@@ -44,6 +44,7 @@ struct KISSConfig {
 
     // Motion compensation
     bool deskew = false;
+    bool use_imu = false;
 };
 
 class KissICP {
@@ -63,6 +64,8 @@ public:
     Vector3dVectorTuple RegisterFrame(const std::vector<Eigen::Vector3d> &frame);
     Vector3dVectorTuple RegisterFrame(const std::vector<Eigen::Vector3d> &frame,
                                       const std::vector<double> &timestamps);
+    Vector3dVectorTuple RegisterFrame(const std::vector<Eigen::Vector3d> & frame, 
+                                      const Sophus::SE3d &imu_pose);
     Vector3dVectorTuple Voxelize(const std::vector<Eigen::Vector3d> &frame) const;
     double GetAdaptiveThreshold();
     Sophus::SE3d GetPredictionModel() const;

@@ -34,4 +34,7 @@ std::vector<Eigen::Vector3d> DeSkewScan(const std::vector<Eigen::Vector3d> &fram
                                         const Sophus::SE3d &start_pose,
                                         const Sophus::SE3d &finish_pose);
 
+std::vector<Eigen::Vector3d> DeSkewScan(const std::vector<Eigen::Vector3d> &frame,
+                                        const Sophus::SE3d &imu_pose);
+
 }  // namespace kiss_icp

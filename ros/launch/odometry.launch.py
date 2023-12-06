@@ -46,6 +46,7 @@ def generate_launch_description():
             DeclareLaunchArgument("publish_odom_tf", default_value="true"),
             # KISS-ICP parameters
             DeclareLaunchArgument("deskew", default_value="false"),
+            DeclareLaunchArgument("use_imu", default_value="false"),
             DeclareLaunchArgument("max_range", default_value="100.0"),
             DeclareLaunchArgument("min_range", default_value="5.0"),
             # This thing is still not suported: https://github.com/ros2/launch/issues/290#issuecomment-1438476902
@@ -63,6 +64,7 @@ def generate_launch_description():
                         "max_range": LaunchConfiguration("max_range"),
                         "min_range": LaunchConfiguration("min_range"),
                         "deskew": LaunchConfiguration("deskew"),
+                        "use_imu": LaunchConfiguration("use_imu"),
                         #  "voxel_size": LaunchConfiguration("voxel_size"),
                         "max_points_per_voxel": 20,
                         "initial_threshold": 2.0,

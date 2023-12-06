@@ -34,7 +34,10 @@
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <string>
+
+#include <sophus/se3.hpp>
 
 namespace kiss_icp_ros {
 
@@ -47,6 +50,8 @@ public:
 private:
     /// Register new frame
     void RegisterFrame(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg);
+
+    void ImuCallback(const sensor_msgs::msg::Imu::ConstSharedPtr &msg);
 
     /// Stream the estimated pose to ROS
     void PublishOdometry(const Sophus::SE3d &pose,
@@ -71,8 +76,13 @@ private:
     bool publish_odom_tf_;
     bool publish_debug_clouds_;
 
+    Sophus::SE3d imu_pose_update_;
+
+    std::unique_ptr<double> last_imu_stamp_;
+
     /// Data subscribers.
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
 
     /// Data publishers.
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
