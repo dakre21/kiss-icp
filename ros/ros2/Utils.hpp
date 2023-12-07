@@ -89,16 +89,9 @@ inline std::string FixFrameId(const std::string &frame_id) {
 }
 
 inline auto GetTimestampField(const PointCloud2::ConstSharedPtr msg) {
-    PointField timestamp_field;
-    for (const auto &field : msg->fields) {
-        if ((field.name == "t" || field.name == "timestamp" || field.name == "time")) {
-            timestamp_field = field;
-        }
-    }
-    if (!timestamp_field.count) {
-        throw std::runtime_error("Field 't', 'timestamp', or 'time'  does not exist");
-    }
-    return timestamp_field;
+    double timestamp = 0.0;
+    timestamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+    return timestamp;
 }
 
 // Normalize timestamps from 0.0 to 1.0
@@ -115,6 +108,7 @@ inline auto NormalizeTimestamps(const std::vector<double> &timestamps) {
     return timestamps_normalized;
 }
 
+#if 0
 inline auto ExtractTimestampsFromMsg(const PointCloud2::ConstSharedPtr msg,
                                      const PointField &field) {
     auto extract_timestamps =
@@ -144,6 +138,7 @@ inline auto ExtractTimestampsFromMsg(const PointCloud2::ConstSharedPtr msg,
     // timestamp type not supported, please open an issue :)
     throw std::runtime_error("timestamp field type not supported");
 }
+#endif
 
 inline std::unique_ptr<PointCloud2> CreatePointCloud2Msg(const size_t n_points,
                                                          const Header &header,
@@ -193,9 +188,9 @@ inline std::vector<double> GetTimestamps(const PointCloud2::ConstSharedPtr msg) 
     auto timestamp_field = GetTimestampField(msg);
 
     // Extract timestamps from cloud_msg
-    std::vector<double> timestamps = ExtractTimestampsFromMsg(msg, timestamp_field);
+    //std::vector<double> timestamps = ExtractTimestampsFromMsg(msg, timestamp_field);
 
-    return timestamps;
+    return {timestamp_field};
 }
 
 inline std::vector<Eigen::Vector3d> PointCloud2ToEigen(const PointCloud2::ConstSharedPtr msg) {
